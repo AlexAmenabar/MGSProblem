@@ -1,0 +1,37 @@
+{
+	"N":	2,
+	"topo":	1,
+	"hopLatency":	3,
+	"linkBand":	10,
+	"k":	2,
+	"l":	3,
+	"nGPUs":	8,
+	"interconnect":	[[1, 1], [1, 1]],
+	"latencies":	[[3, 3], [3, 3]],
+	"bandwidths":	[[0, 10], [10, 0]],
+	"nodes":	[{
+			"node":	0,
+			"nGPUs":	4,
+			"intraNodeTopo":	3,
+			"hopLatencyNVLink":	1,
+			"hopLatencyPCIe":	2,
+			"linkBandNVLink":	180,
+			"linkBandPCIe":	25,
+			"CP":	[1, 1, 1, 1],
+			"gpusInterconnect":	[[0, 1, 2, 2], [1, 0, 2, 2], [2, 2, 0, 1], [2, 2, 1, 0]],
+			"gpusLatencies":	[[0, 1, 4, 4], [1, 0, 4, 4], [4, 4, 0, 1], [4, 4, 1, 0]],
+			"gpusBandwidths":	[[0, 180, 25, 25], [180, 0, 25, 25], [25, 25, 0, 180], [25, 25, 180, 0]]
+		}, {
+			"node":	1,
+			"nGPUs":	4,
+			"intraNodeTopo":	3,
+			"hopLatencyNVLink":	1,
+			"hopLatencyPCIe":	2,
+			"linkBandNVLink":	180,
+			"linkBandPCIe":	25,
+			"CP":	[1, 1, 1, 1],
+			"gpusInterconnect":	[[0, 1, 2, 2], [1, 0, 2, 2], [2, 2, 0, 1], [2, 2, 1, 0]],
+			"gpusLatencies":	[[0, 1, 4, 4], [1, 0, 4, 4], [4, 4, 0, 1], [4, 4, 1, 0]],
+			"gpusBandwidths":	[[0, 180, 25, 25], [180, 0, 25, 25], [25, 25, 0, 180], [25, 25, 180, 0]]
+		}]
+}

@@ -1,0 +1,113 @@
+{
+    "cluster": {
+        "N": 8,
+        "topology": 1,
+        "linkBand": 100,
+        "hopLatency": 1000,
+        "k": 2,
+        "l": 3
+    },
+
+    "intraNodeTopologies": [
+        {
+            "firstNode": 0,
+            "lastNode": 1,
+            "topology": 0,
+            "CP": 10,
+            "nvlinkLat": 1,
+            "nvlinkBand": 1000,
+            "pcieLat": 100,
+            "pcieBand": 250
+        },
+        {
+            "firstNode": 2,
+            "lastNode": 3,
+            "topology": 1,
+            "CP": [10, 20, 30, 40],
+            "nvlinkLat": 1,
+            "nvlinkBand": 1000,
+            "pcieLat": 100,
+            "pcieBand": 250
+        },
+        {
+            "firstNode": 4,
+            "lastNode": 5,
+            "topology": 2,
+            "CP": [10, 20, 30, 40],
+            "nvlinkLat": 1,
+            "nvlinkBand": 1000,
+            "pcieLat": 100,
+            "pcieBand": 250
+        },
+        {
+            "firstNode": 6,
+            "lastNode": 7,
+            "topology": 3,
+            "CP": 10,
+            "nvlinkLat": 1,
+            "nvlinkBand": 1000,
+            "pcieLat": 100,
+            "pcieBand": 250
+        },
+        {
+            "firstNode": 8,
+            "lastNode": 9,
+            "topology": 4,
+            "CP": 10,
+            "nvlinkLat": 1,
+            "nvlinkBand": 1000,
+            "pcieLat": 100,
+            "pcieBand": 250
+        },
+        {
+            "firstNode": 10,
+            "lastNode": 11,
+            "topology": 5,
+            "CP": 10,
+            "nvlinkLat": 1,
+            "nvlinkBand": 1000,
+            "pcieLat": 100,
+            "pcieBand": 250
+        },
+        {
+            "firstNode": 12,
+            "lastNode": 12,
+            "topology": 6,
+            "CP": 10,
+            "nvlinkLat": 1,
+            "nvlinkBand": 1000,
+            "pcieLat": 100,
+            "pcieBand": 250
+        },
+        {
+            "firstNode": 13,
+            "lastNode": 13,
+            "topology": 7,
+            "CP": 10,
+            "nvlinkLat": 1,
+            "nvlinkBand": 1000,
+            "pcieLat": 100,
+            "pcieBand": 250
+        },
+        {
+            "firstNode": 14,
+            "lastNode": 14,
+            "topology": 8,
+            "CP": 10,
+            "nvlinkLat": 1,
+            "nvlinkBand": 1000,
+            "pcieLat": 100,
+            "pcieBand": 250
+        },
+        {
+            "firstNode": 15,
+            "lastNode": 15,
+            "topology": 9,
+            "CP": 10,
+            "nvlinkLat": 1,
+            "nvlinkBand": 1000,
+            "pcieLat": 100,
+            "pcieBand": 250
+        }
+    ]
+}
