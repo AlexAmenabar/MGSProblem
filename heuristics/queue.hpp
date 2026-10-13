@@ -2,8 +2,11 @@ using namespace std;
 
 // Linked list queue
 
-#ifndef QUEUE_HPP
-#define QUEUE_HPP
+#pragma once
+
+/* 
+Queue implementation. 
+*/
 
 template <typename T>
 struct Node {
@@ -26,16 +29,29 @@ public:
     // constructor
     LinkedList() : first(nullptr), last(nullptr), N(0) {}
 
+    // check if the queue is empty
     bool isEmpty(){
 
         return N == 0;
     }
 
+    // get the number of elements in the queue
     unsigned int getN(){
+
         return N;
     }
 
-    void addElement(Node<T>* node){
+    Node<T>* getFirst() {
+        return first;
+    }
+
+    Node<T>* getNext(Node<T> *node){
+
+        return node->next;
+    }
+
+    // add a node to the last queue position
+    virtual void addElement(Node<T>* node){
 
         node->next = nullptr;
         node->prev = last;
@@ -55,6 +71,7 @@ public:
         N ++;
     }
 
+    // get element in the position index
     Node<T>* getElementByIndex(unsigned int index){
 
         unsigned int i = 0;
@@ -79,7 +96,8 @@ public:
         return nullptr;
     }
 
-    void removeElement(Node<T> *node){
+    // remove the node from the queue
+    virtual void removeElement(Node<T> *node){
 
         if(N==0)
             return;
@@ -107,7 +125,8 @@ public:
         N --;
     }
 
-    Node<T>* removeElementByIndex(unsigned int index){
+    // remove the node in the position index
+    virtual Node<T>* removeElementByIndex(unsigned int index){
 
         Node<T>* node = getElementByIndex(index);
         if(node)
@@ -116,5 +135,3 @@ public:
         return node;
     }
 };
-
-#endif

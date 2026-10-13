@@ -10,11 +10,22 @@
     "minM":0,
     "maxO":10,
     "minO": 1,
-    "maxIT": 5,
-    "minIT": 3,
+    "minS": 50,
+    "maxS": 95,
+    "maxIT": 3,
+    "minIT": 2,
+    "maxPh": 3,
+    "minPh": 2,
     "maxR": 8,
     "minR": 1,
     "cpts":["RING"],
     "minL": 1,
-    "maxL": 100
+    "maxL": 100,
+
+    "iterative": 0.33,
+    "iterativephases": 0.33,
+    "phasesiterative": 0.33,
+    "moldable": 0.0,
+    "malleable": 1.0,
+    "evolving": 0.0
 }

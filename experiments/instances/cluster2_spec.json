@@ -1,0 +1,23 @@
+{
+    "cluster": {
+        "N": 1,
+        "topology": 1,
+        "linkBand": 100,
+        "hopLatency": 3,
+        "k": 2,
+        "l": 3
+    },
+
+    "intraNodeTopologies": [
+        {
+            "firstNode": 0,
+            "lastNode": 0,
+            "topology": 8,
+            "CP": 1,
+            "nvlinkLat": 1,
+            "nvlinkBand": 1800,
+            "pcieLat": 2,
+            "pcieBand": 256
+        }
+    ]
+}

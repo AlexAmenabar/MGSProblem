@@ -1,6 +1,5 @@
+#pragma once
 
+class JobQueue;
 
-#ifndef IO_HPP
-#define IO_HPP
-
-#endif
+void writeSimulationResults(const char *allocationFilename, const char *summaryFilename, JobQueue *fQueue, unsigned int makespan);

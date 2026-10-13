@@ -68,10 +68,16 @@ Testing/
 .cache/
 
 # experiments
-experiments/
+experiments/results/
+experiments/slurmFiles/
+
+heuristics/*.csv
+heuristics/*.json
+heuristics/*.pdf
+heuristics/*.txt
+
 .venv/
 .uv/
 orToolsImplementation/.uv/
 orToolsImplementation/.venv/
-*.png
-*.sbatch
+tmp/

@@ -4,11 +4,12 @@
 #include <cstdio>
 #include <string>
 
+#include "libMGSP.hpp"
 #include "queue.hpp"
-#include "jobQueue.hpp"
 #include "eventQueue.hpp"
-#include "instance.hpp"
-#include "heuristics.hpp"
+#include "jobQueue.hpp"
+#include "IO.hpp"
+
 #include "cJSON.h"
 
 cJSON* readJSONFile(char *in){
@@ -98,7 +99,8 @@ workload_t* loadWorkload(char *in){
 
             // load job data
             job->nIterations = (unsigned int)cJSON_GetObjectItem(jobItem, "IT")->valueint;
-            job->S = (float)cJSON_GetObjectItem(jobItem, "S")->valuedouble;
+            job->m = (unsigned int)cJSON_GetObjectItem(jobItem, "m")->valueint;
+
             //job->CPT = (unsigned int)cJSON_GetObjectItem(jobItem, "CPT")->valuestring;
             job->totalC = (unsigned int)cJSON_GetObjectItem(jobItem, "totalC")->valueint;
             job->totalM = (unsigned int)cJSON_GetObjectItem(jobItem, "totalM")->valueint;
@@ -110,6 +112,7 @@ workload_t* loadWorkload(char *in){
             job->minR = (unsigned int*)calloc(job->nIterations, sizeof(unsigned int));
             job->maxR = (unsigned int*)calloc(job->nIterations, sizeof(unsigned int));
             job->meanR = (unsigned int*)calloc(job->nIterations, sizeof(unsigned int));
+            job->S = (float*)malloc(job->nIterations * sizeof(float));
 
             for(unsigned int k = 0; k<job->nIterations; k++){
 
@@ -118,6 +121,7 @@ workload_t* loadWorkload(char *in){
                 job->minR[k] = (unsigned int)cJSON_GetArrayItem(cJSON_GetObjectItem(jobItem, "minR"), k)->valueint;
                 job->maxR[k] = (unsigned int)cJSON_GetArrayItem(cJSON_GetObjectItem(jobItem, "maxR"), k)->valueint;
                 job->meanR[k] = (unsigned int)cJSON_GetArrayItem(cJSON_GetObjectItem(jobItem, "meanR"), k)->valueint;
+                job->S[k] = (float)cJSON_GetArrayItem(cJSON_GetObjectItem(jobItem, "S"), k)->valuedouble;
             }
         }
     }
@@ -247,20 +251,28 @@ void initializeJobsState(workload_t *workload, simulationConf_t *simConf){
             job->workflow = workflow;
             job->currentIteration = 0;
             job->jobId = jobId;
+            job->rcf = false; // no reconfiguration scheduled for now
+
+            job->sPending = 0;
+            job->sRunning = 0;
+            job->ePending = 0;
+            job->eRunning = 0;
+
             jobId ++;
 
             switch(simConf->simType){
                 
                 // if FIXED, all iterations of the job uses the same number of resources, so only 1 allocation
                 case FIXED:
-                    job->allocation = (allocation_t*)calloc(1,sizeof(allocation_t));
+                    //job->allocation = (allocation_t*)calloc(1,sizeof(allocation_t));
+                    job->allocation = (allocation_t*)calloc(job->nIterations + 1,sizeof(allocation_t));
                     break;
                 // for EVOLVING and MALLEABLE executions, each iteration requires an allocation 
                 case EVOLVING:
-                    job->allocation = (allocation_t*)calloc(job->nIterations,sizeof(allocation_t));
+                    job->allocation = (allocation_t*)calloc(job->nIterations + 1,sizeof(allocation_t));
                     break;
                 case MALLEABLE:
-                    job->allocation = (allocation_t*)calloc(job->nIterations,sizeof(allocation_t));
+                    job->allocation = (allocation_t*)calloc(job->nIterations + 1,sizeof(allocation_t));
                     break;
             }
         }
@@ -271,6 +283,13 @@ void initializeClusterState(cluster_t *cluster){
 
     // initialize GPUs state (all GPUs are available)
     cluster->nAv = cluster->nGPUs;
+
+    // available GPUs per node
+    cluster->nAvPerNode = (unsigned int*)calloc(cluster->N, sizeof(unsigned int));
+    for(unsigned int node = 0; node<cluster->N; node++){
+
+        cluster->nAvPerNode[node] = cluster->nGPUsPerNode[node];
+    }
 
     cluster->avGPUs = (unsigned int*)calloc(cluster->nAv, sizeof(unsigned int));
     for(unsigned int gpu = 0; gpu<cluster->nAv; gpu++)
@@ -290,13 +309,9 @@ void createJobArrivalEvents(EventQueue *evQueue, workload_t *workload){
             // create job arrival event and add job to it
             event_t *event = createEvent(&(workload->workflows[i].jobs[j]), ARRIVAL, launchTime);
 
-            printf(" -- Creating event at time step %u\n", launchTime);
-            fflush(stdout);
-
             // create event node
             Node<event_t*> *evNode = (Node<event_t*>*)calloc(1,sizeof(Node<event_t*>));
             evNode->data = event;
-
 
             // add element in the queue by the corresponding time step
             evQueue->addElementByTimeStep(evNode);
@@ -304,51 +319,30 @@ void createJobArrivalEvents(EventQueue *evQueue, workload_t *workload){
     }
 }
 
+void storeResults(char *out){
 
-// schedule job 
-void schedule(event_t *event, EventQueue *evQueue, cluster_t *cluster, simulationConf_t *simConf){
-
-    // select job to launch following the scheduling policy
-    FCFS(evQueue, event, cluster, simConf);
-}
-
-// reconfigure job
-void reconfigure(){
-
+    // TODO
     return;
 }
-
-void finishJob(event_t *event, EventQueue *evQueue, cluster_t *cluster, simulationConf_t *simConf){
-
-    // job finished, so deallocate resources
-    deallocateResources(event->job, cluster);
-}
-
-void processEvent(event_t *event, EventQueue *evQueue, cluster_t *cluster, simulationConf_t *simConf){
-
-    switch(event->eventEnum){
-
-        case ARRIVAL:
-            schedule(event, evQueue, cluster, simConf);
-            break;
-        case RESCHEDULE:
-            schedule(event, evQueue, cluster, simConf);
-            break;
-        case END:
-            finishJob(event, evQueue, cluster, simConf);
-            break;
-        case END_IT:
-            break;
-        case END_RECONF:
-            break;
-    }
-}
-
 
 int main(int argc, char *argv[]){
 
     // get simulation type
     unsigned int simType = std::stoul(argv[3]);
+
+    // pending and running queues orderings
+    unsigned int schedPol = std::stoul(argv[4]);
+    unsigned int reconfPol = std::stoul(argv[5]);
+    
+    // number of GPUs selection policy
+    unsigned int sched_allocation_n_pol = std::stoul(argv[6]);
+    unsigned int reconf_allocation_n_pol = std::stoul(argv[7]);
+
+    // placement policies
+    unsigned int sched_place = std::stoul(argv[8]);
+    unsigned int reconf_place = std::stoul(argv[9]);
+
+    /* initialize simulation configuration structure */
     simulationConf_t simConf;
     switch(simType){
         case 0:
@@ -362,33 +356,139 @@ int main(int argc, char *argv[]){
             break;
     }
 
-    // load workdload
+    /* Sched, reconf queue ordering policies */
+    switch(schedPol){
+        case 0:
+            simConf.schedPolicy = eQUEUE_FCFS_SCHED;
+            break;
+    }
+
+    switch(reconfPol){
+        case 0:
+            simConf.reconfPolicy = eQUEUE_NOP;
+            break;
+        case 1:
+            simConf.reconfPolicy = eQUEUE_FCFS;
+            break;
+        case 2:
+            simConf.reconfPolicy = eQUEUE_UTIL;
+            break;
+        case 3:
+            simConf.reconfPolicy = eQUEUE_NET;
+            break;
+    }
+
+    switch(sched_allocation_n_pol){
+        case 0: 
+            simConf.schedAllocationN = e_MIN_ALLOC;
+            break;
+        case 1: 
+            simConf.schedAllocationN = e_MIN_1_ALLOC;
+            break;
+        case 2: 
+            simConf.schedAllocationN = e_MAX_ALLOC;
+            break;
+        case 3: 
+            simConf.schedAllocationN = e_MAX_POSSIBLE_ALLOC;
+            break;
+        case 4: 
+            simConf.schedAllocationN = e_MAX_NODE_ALLOC;
+            break;
+        case 5: 
+            simConf.schedAllocationN = e_MAX_TOPO_ALLOC;
+            break;
+    }
+
+    switch(reconf_allocation_n_pol){
+        case 0:
+            simConf.reconfAllocationN = e_EXPAND_SHRINK;
+            break;
+        case 1:
+            simConf.reconfAllocationN = e_EXPAND;
+            break;
+        case 2:
+            simConf.reconfAllocationN = e_EXPAND_SHRINK_MIGRATE;
+            break;
+        case 3:
+            simConf.reconfAllocationN = e_EXPAND_SHRINK_UNLIMITED;
+            break;
+        case 4:
+            simConf.reconfAllocationN = e_EXPAND_UNLIMITED;
+            break;
+        case 5:
+            simConf.reconfAllocationN = e_EXPAND_SHRINK_MIGRATE_UNLIMITED;
+            break;
+    }
+
+    switch(sched_place){
+        case 0:
+            simConf.schedAllocationPlace = e_SEQUENTIAL;
+            break;
+        case 2:
+            simConf.schedAllocationPlace = e_TOPO_BEST_EFFORT;
+            break;
+        case 3:
+            simConf.schedAllocationPlace = e_TOPO_OPT;
+            break;
+    }
+
+    switch(reconf_place){
+        case 0:
+            simConf.reconfAllocationPlace = e_SEQUENTIAL;
+            break;
+        case 2:
+            simConf.reconfAllocationPlace = e_TOPO_BEST_EFFORT;
+            break;
+        case 3:
+            simConf.reconfAllocationPlace = e_TOPO_OPT;
+            break;
+    }
+
+
+    /* load workload from file */
     workload_t *workload = loadWorkload(argv[1]);
     initializeJobsState(workload, &simConf);
 
-    // load cluster
+    /* load cluster from file */
     cluster_t *cluster = loadCluster(argv[2]);
     initializeClusterState(cluster);
 
-    // initialize event queue
-    EventQueue evQueue;
 
+    /* Initialize event queue */
+    EventQueue *evQueue = new EventQueue();
     // create jobs arrival time events
-    createJobArrivalEvents(&evQueue, workload);
-
+    createJobArrivalEvents(evQueue, workload);    
     // update job priorities (temporal solution)
-    evQueue.updateJobPriorities();
-    evQueue.printEvents();
+    evQueue->initializeJobPriorities();
+    evQueue->printEvents();
+
+    /* Initialize job queues */
+    JobQueue *pQueue = initSchedQueue(&simConf);
+    JobQueue *rQueue = initReconfQueue(&simConf);
+    JobQueue *fQueue = new JobQueueFCFS(); // this queue does not have any policy
 
 
-    // loop over queues and execute heuristics
-    while(!evQueue.isEmpty()){
+    unsigned int makespan = 0;
+    // process events until no events are left to process
+    while(!evQueue->isEmpty()){
         
-        Node<event_t*> *eventNode = evQueue.removeElementByIndex(0);
-        processEvent(eventNode->data, &evQueue, cluster, &simConf);
+        // get first event time step
+        unsigned int t = evQueue->getElementByIndex(0)->data->t;
+ 
+        // process all events in time step t
+        bool p = processEventsTimeStep(evQueue, t, pQueue, rQueue, fQueue, cluster, &simConf); 
+
+        // invoque the scheduler and reconfigurer if necessary
+        if(p){
+
+            rQueue->reconfigure(evQueue, t, rQueue, fQueue, cluster, &simConf);
+            pQueue->schedule(evQueue, t, pQueue, rQueue, cluster, &simConf);
+        }
+
+        makespan = t;
     }
 
-    storeResults();
-
+    writeSimulationResults(argv[10], argv[11], fQueue, makespan);
+    
     return 0;
 }

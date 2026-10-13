@@ -1,37 +1,18 @@
+#pragma once
+
 #include "queue.hpp"
-#include "instance.hpp"
-
-#ifndef EVENTQUEUE_HPP
-#define EVENTQUEUE_HPP
-
-enum EVENT_ENUM {
-
-    ARRIVAL,
-    RESCHEDULE,
-    END,
-    END_IT,
-    END_RECONF
-
-};
-
-struct event_t {
-
-    job_t *job; // job related to the event
-    EVENT_ENUM eventEnum; // event 
-    unsigned int t; // time step in which the event occur
-};
+#include "libMGSP.hpp"
 
 
-event_t* createEvent(job_t *job, EVENT_ENUM eventEnum, unsigned int t);
-void printEvent(event_t *event);
+/* Event queue */
 
 class EventQueue : public LinkedList<event_t*> {
-
 public:
 
+    // add element to the queue in the corresponding position depending on the time step and eventEnum related to the event
     void addElementByTimeStep(Node<event_t*> *node){
-
         Node<event_t*> *aux = first;
+        
         unsigned int i = 0;
 
         while(aux && // if higher time, lower priority or event not END
@@ -64,11 +45,12 @@ public:
         }
     }
 
-    event_t* findNextEndEvent(){
-
+    // find the first EVENT in the queue
+    event_t* findNextEvent(EVENT_ENUM EVENT){
+        
         Node<event_t*> *node = first;
 
-        while(node && node->data->eventEnum != END){
+        while(node && node->data->eventEnum != EVENT){
 
             node = node->next;
         }
@@ -76,7 +58,8 @@ public:
         return node->data;
     }
 
-    void updateJobPriorities(){
+    // initialize job priorities when only arrivals are loaded in the queue
+    void initializeJobPriorities(){
 
         Node<event_t*> *evNode = first;
         unsigned int priority = 0;
@@ -89,6 +72,7 @@ public:
         }
     }
 
+    // print all events data in the queue
     void printEvents(){
 
         // get node
@@ -103,5 +87,3 @@ public:
         fflush(stdout);
     }
 };
-
-#endif

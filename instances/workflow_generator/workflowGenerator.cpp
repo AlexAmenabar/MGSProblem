@@ -213,6 +213,24 @@ workflowSpec_t *parseWorkflowJSON(cJSON *json) {
     }
     spec->maxIT = (unsigned int)item->valueint;
 
+    // phase range per job
+    item = cJSON_GetObjectItem(json, "minPh");
+    if (!cJSON_IsNumber(item)) {
+        fprintf(stderr, "Error: 'minPh' must be a number\n");
+        free(spec);
+        return NULL;
+    }
+    spec->minPH = (unsigned int)item->valueint;
+
+    item = cJSON_GetObjectItem(json, "maxPh");
+    if (!cJSON_IsNumber(item)) {
+        fprintf(stderr, "Error: 'maxPh' must be a number\n");
+        free(spec);
+        return NULL;
+    }
+    spec->maxPH = (unsigned int)item->valueint;
+
+
     // launch times range per job
     item = cJSON_GetObjectItem(json, "minL");
     if (!cJSON_IsNumber(item)) {
@@ -247,6 +265,76 @@ workflowSpec_t *parseWorkflowJSON(cJSON *json) {
         return NULL;
     }
     spec->maxR = (unsigned int)item->valueint;
+
+
+    // range of resources
+    item = cJSON_GetObjectItem(json, "minS");
+    if (!cJSON_IsNumber(item)) {
+        fprintf(stderr, "Error: 'minS' must be a number\n");
+        free(spec);
+        return NULL;
+    }
+    spec->minS = (unsigned int)item->valueint;
+
+    item = cJSON_GetObjectItem(json, "maxS");
+    if (!cJSON_IsNumber(item)) {
+        fprintf(stderr, "Error: 'maxS' must be a number\n");
+        free(spec);
+        return NULL;
+    }
+    spec->maxS = (unsigned int)item->valueint;
+
+
+    item = cJSON_GetObjectItem(json, "iterative");
+    if (!cJSON_IsNumber(item)) {
+        fprintf(stderr, "Error: 'maxR' must be a number\n");
+        free(spec);
+        return NULL;
+    }
+    spec->pIterative = (float)item->valuedouble;
+
+    item = cJSON_GetObjectItem(json, "iterativephases");
+    if (!cJSON_IsNumber(item)) {
+        fprintf(stderr, "Error: 'maxR' must be a number\n");
+        free(spec);
+        return NULL;
+    }
+    spec->pIterativePhases = (float)item->valuedouble;
+
+    item = cJSON_GetObjectItem(json, "phasesiterative");
+    if (!cJSON_IsNumber(item)) {
+        fprintf(stderr, "Error: 'maxR' must be a number\n");
+        free(spec);
+        return NULL;
+    }
+    spec->pPhasesIterative = (float)item->valuedouble;
+
+    item = cJSON_GetObjectItem(json, "moldable");
+    if (!cJSON_IsNumber(item)) {
+        fprintf(stderr, "Error: 'maxR' must be a number\n");
+        free(spec);
+        return NULL;
+    }
+    spec->pMoldable = (float)item->valuedouble;
+
+    item = cJSON_GetObjectItem(json, "malleable");
+    if (!cJSON_IsNumber(item)) {
+        fprintf(stderr, "Error: 'maxR' must be a number\n");
+        free(spec);
+        return NULL;
+    }
+    spec->pMalleable = (float)item->valuedouble;
+
+    item = cJSON_GetObjectItem(json, "evolving");
+    if (!cJSON_IsNumber(item)) {
+        fprintf(stderr, "Error: 'maxR' must be a number\n");
+        free(spec);
+        return NULL;
+    }
+    spec->pEvolving = (float)item->valuedouble;
+
+
+    spec->pRigid = 1.0 - spec->pEvolving - spec->pMalleable - spec->pMoldable;
 
     // communication patterns
     cJSON *cpts = cJSON_GetObjectItem(json, "cpts");
@@ -362,6 +450,7 @@ int writeWorkflowJSON(const char *filename, const workflow_t *workflow){
             cJSON *job = cJSON_CreateObject();
             cJSON_AddNumberToObject(job,"O",workflow->O[i][j]);
             cJSON_AddNumberToObject(job,"IT",workflow->IT[i][j]);
+            cJSON_AddNumberToObject(job,"Y",workflow->malleable[i][j]);
 
             // array of minR and max R per iteration
             cJSON *C = cJSON_CreateArray();
@@ -369,18 +458,21 @@ int writeWorkflowJSON(const char *filename, const workflow_t *workflow){
             cJSON *minR = cJSON_CreateArray();
             cJSON *maxR = cJSON_CreateArray();
             cJSON *jCPT = cJSON_CreateArray();
+            cJSON *jS = cJSON_CreateArray();
 
             cJSON_AddItemToObject(job, "C", C);
             cJSON_AddItemToObject(job, "M", M);
             cJSON_AddItemToObject(job, "minR", minR);
             cJSON_AddItemToObject(job, "maxR", maxR);
             cJSON_AddItemToObject(job, "CPT", jCPT);
+            cJSON_AddItemToObject(job, "S", jS);
 
             // resource request for each iteration
             for (unsigned int k = 0; k < workflow->IT[i][j]; k++) {
 
                 cJSON_AddNumberToObject(C,"C",workflow->C[i][j][k]);
                 cJSON_AddNumberToObject(M,"M",workflow->M[i][j][k]);
+                cJSON_AddNumberToObject(jS,"S",workflow->S[i][j][k]);
                 cJSON_AddItemToArray(minR,cJSON_CreateNumber(workflow->minR[i][j][k]));
                 cJSON_AddItemToArray(maxR,cJSON_CreateNumber(workflow->maxR[i][j][k]));
                 cJSON_AddStringToObject(jCPT,"CPT",cptToString((CPT)workflow->CPT[i][j][k]));
@@ -393,7 +485,7 @@ int writeWorkflowJSON(const char *filename, const workflow_t *workflow){
             // for evolving and fixed
             unsigned int totalC = 0, totalM = 0, *meanR;
             meanR = (unsigned int*)calloc(workflow->IT[i][j], sizeof(unsigned int));
-            
+
             cJSON *jMeanR = cJSON_CreateArray();
             cJSON_AddItemToObject(job, "meanR", jMeanR);
 
@@ -409,9 +501,6 @@ int writeWorkflowJSON(const char *filename, const workflow_t *workflow){
 
             cJSON_AddNumberToObject(job, "totalC", totalC);
             cJSON_AddNumberToObject(job, "totalM", totalM);
-
-            cJSON_AddNumberToObject(job, "S", (float)(rand() % 100) / (float)100);
-
         }
 
         // add workflow to global json
@@ -465,13 +554,31 @@ int main(int argc, char*argv[]){
     workflow->nJobs = (unsigned int*)calloc(workflow->nWorkflows, sizeof(unsigned int));
     workflow->C = (unsigned int***)calloc(workflow->nWorkflows, sizeof(unsigned int**));
     workflow->M = (unsigned int***)calloc(workflow->nWorkflows, sizeof(unsigned int**));
+    workflow->S = (double***)calloc(workflow->nWorkflows, sizeof(double**));
     workflow->O = (unsigned int**)calloc(workflow->nWorkflows, sizeof(unsigned int*));
+    workflow->malleable = (unsigned int**)calloc(workflow->nWorkflows, sizeof(unsigned int*));
     workflow->IT = (unsigned int**)calloc(workflow->nWorkflows, sizeof(unsigned int*));
+    workflow->PH = (unsigned int**)calloc(workflow->nWorkflows, sizeof(unsigned int*));
     workflow->l = (unsigned int*)calloc(workflow->nWorkflows, sizeof(unsigned int));
     workflow->CPT = (unsigned int***)calloc(workflow->nWorkflows, sizeof(unsigned int**));
     
     workflow->maxR = (unsigned int***)calloc(workflow->nWorkflows, sizeof(unsigned int**));
     workflow->minR = (unsigned int***)calloc(workflow->nWorkflows, sizeof(unsigned int**));
+
+
+    // calculate how much jobs of each type will be generated
+    unsigned int rigid, moldable, malleable, evolving;
+    unsigned int iterative, iterativePhases, phasesIterative;
+
+    rigid = (unsigned int)((float)100.0 * spec->pRigid);
+    moldable = (unsigned int)((float)100.0 * spec->pMoldable) + rigid;
+    malleable = (unsigned int)((float)100.0 * spec->pMalleable) + moldable;
+    evolving  = 100;
+
+    iterative = (unsigned int)((float)100.0 * spec->pIterative);
+    iterativePhases = (unsigned int)((float)100.0 * spec->pIterativePhases) + iterative;
+    phasesIterative = 100;
+    
 
     // loop over jobs/workflows and generate them
     unsigned int value, range;
@@ -494,76 +601,303 @@ int main(int argc, char*argv[]){
         // allocate memory for the jobs in the workflow
         workflow->C[i] = (unsigned int**)calloc(workflow->nJobs[i], sizeof(unsigned int*));
         workflow->M[i] = (unsigned int**)calloc(workflow->nJobs[i], sizeof(unsigned int*));
+        workflow->S[i] = (double**)calloc(workflow->nJobs[i], sizeof(double*));
         workflow->O[i] = (unsigned int*)calloc(workflow->nJobs[i], sizeof(unsigned int));
+        workflow->malleable[i] = (unsigned int*)calloc(workflow->nJobs[i], sizeof(unsigned int));
         workflow->IT[i] = (unsigned int*)calloc(workflow->nJobs[i], sizeof(unsigned int));
+        workflow->PH[i] = (unsigned int*)calloc(workflow->nJobs[i], sizeof(unsigned int));
         workflow->maxR[i] = (unsigned int**)calloc(workflow->nJobs[i], sizeof(unsigned int*));
         workflow->minR[i] = (unsigned int**)calloc(workflow->nJobs[i], sizeof(unsigned int*));
         workflow->CPT[i] = (unsigned int**)calloc(workflow->nJobs[i], sizeof(unsigned int*));
 
+        // loop over jobs in the workflow and generate them
         for(unsigned int j = 0; j<workflow->nJobs[i]; j++){
 
             // reconfiguration overhead for each iteration
             range = spec->maxO - spec->minO + 1;
             workflow->O[i][j] = rand() % range + spec->minO;
 
-            // number of iterations
-            range = spec->maxIT - spec->minIT + 1;
-            workflow->IT[i][j] = rand() % range + spec->minIT;
+            // compute app type
+            unsigned int appType = rand() % 100;
+            unsigned int jobType = rand() % 100;
+            
 
-            // CPT of the job
+            if(jobType <= moldable){
+                
+                workflow->malleable[i][j] = 0;
+            }
+            else{
+                workflow->malleable[i][j] = 1;
+            }
 
-            // max. and min. resources per each job
-            workflow->C[i][j] = (unsigned int*)calloc(workflow->IT[i][j], sizeof(unsigned int));
-            workflow->M[i][j] = (unsigned int*)calloc(workflow->IT[i][j], sizeof(unsigned int));
-            workflow->maxR[i][j] = (unsigned int*)calloc(workflow->IT[i][j], sizeof(unsigned int));
-            workflow->minR[i][j] = (unsigned int*)calloc(workflow->IT[i][j], sizeof(unsigned int));
-            workflow->CPT[i][j] = (unsigned int*)calloc(workflow->IT[i][j], sizeof(unsigned int));
+            // only iterative
+            if(appType <= iterative){
+
+                // compute the number of iterations
+                range = (spec->maxIT * spec->maxPH) - (spec->minIT * spec->minPH) + 1;
+                workflow->IT[i][j] = rand() % range + (spec->minIT * spec->minPH);
+
+                // CPT of the job
+
+                // allocate memory for the job properties per iteration
+                workflow->C[i][j] = (unsigned int*)calloc(workflow->IT[i][j], sizeof(unsigned int));
+                workflow->M[i][j] = (unsigned int*)calloc(workflow->IT[i][j], sizeof(unsigned int));
+                workflow->S[i][j] = (double*)calloc(workflow->IT[i][j], sizeof(double));
+                workflow->maxR[i][j] = (unsigned int*)calloc(workflow->IT[i][j], sizeof(unsigned int));
+                workflow->minR[i][j] = (unsigned int*)calloc(workflow->IT[i][j], sizeof(unsigned int));
+                workflow->CPT[i][j] = (unsigned int*)calloc(workflow->IT[i][j], sizeof(unsigned int));
 
 
-            // compute mean C and M
-            unsigned int meanC, meanM, varC, varM; 
-            range = spec->maxC - spec->minC + 1;
-            meanC = rand() % range + spec->minC;
-            range = 75 - 10 + 1;
-            varC = rand() % range + 10;
+                // compute mean C and M and the std
+                unsigned int meanC, meanM;
+                double stdC, stdM; 
+                range = spec->maxC - spec->minC + 1;
+                meanC = rand() % range + spec->minC;
+                stdC = sqrt((double)meanC * (0.10 + ((double)rand() / (double)RAND_MAX) * (0.4 - 0.10)));                
 
-            range = spec->maxM - spec->minM + 1;
-            meanM = rand() % range + spec->minM;
-            range = 75 - 10 + 1;
-            varM = rand() % range + 10;
+                range = spec->maxM - spec->minM + 1;
+                meanM = rand() % range + spec->minM;
+                stdM = sqrt((double)meanM * (0.10 + ((double)rand() / (double)RAND_MAX) * (0.4 - 0.10)));     
 
-            for(unsigned int k = 0; k<workflow->IT[i][j]; k++){
+                // loop over job iterations
+                for(unsigned int k = 0; k<workflow->IT[i][j]; k++){
 
-                // computation for each iteration
-                //range = spec->maxC - spec->minC + 1;
-                double dC = gaussian((double)meanC, (double)varC);
-                if(dC < 0.0) 
-                    dC = 0.0;
-                workflow->C[i][j][k] = (unsigned int)dC;//rand() % range + spec->minC;
+                    // compute C and M for the iteration
+                    double dC = gaussian((double)meanC, stdC);
+                    if(dC < 0.0) 
+                        dC = 0.0;
+                    workflow->C[i][j][k] = (unsigned int)dC;
+                    double dM = gaussian((double)meanM, stdM);
+                    if(dM < 0.0) 
+                        dM = 0.0;
+                    workflow->M[i][j][k] = (unsigned int)dM;
 
-                // communication for each iteration
-                //range = spec->maxM - spec->minM + 1;
-                double dM = gaussian((double)meanM, (double)varM);
-                if(dM < 0.0) 
-                    dM = 0.0;
-                workflow->M[i][j][k] = (unsigned int)dM;//rand() % range + spec->minM;
+                    workflow->CPT[i][j][k] = rand() % spec->nCPTs;
+                }
+
+                // scalability and resource request are constants during the job execution
 
                 // resources per each iteration
                 range = spec->maxR - spec->minR + 1;
-                workflow->minR[i][j][k] = rand() % range + spec->minR;
-
-                range = spec->maxR - workflow->minR[i][j][k] + 1;
-                workflow->maxR[i][j][k] = rand() % range + workflow->minR[i][j][k];
-
+                unsigned int minR = rand() % range + spec->minR;
                 
+                range = spec->maxR - minR + 1;
+                unsigned int maxR = rand() % range + minR;
+
                 // bound max
-                if(workflow->maxR[i][j][k] > spec->maxR){
+                if(maxR > spec->maxR){
                     
-                    workflow->maxR[i][j][k] = spec->maxR;
+                    maxR = spec->maxR;
                 }
 
-                workflow->CPT[i][j][k] = rand() % spec->nCPTs;
+                // scalability
+                range = spec->maxS - spec->minS + 1;
+                double S = (double)(rand() % range + spec->minS) / 100.0;
 
+                for(unsigned int k = 0; k<workflow->IT[i][j]; k++){
+                
+                    workflow->minR[i][j][k] = minR;
+                    workflow->maxR[i][j][k] = maxR;
+
+                    if(jobType <= rigid){
+
+                        workflow->maxR[i][j][k] = workflow->minR[i][j][k];
+                    }
+
+                    workflow->S[i][j][k] = S;
+                }
+            }
+            // iterative phases
+            else if(appType <= iterativePhases){
+                
+                // compute the number of iterations and the number of phases
+                range = spec->maxIT - spec->minIT + 1;
+                unsigned int iterations = rand() % range + spec->minIT;
+
+                range = spec->maxPH - spec->minPH + 1;
+                unsigned int phases = rand() % range + spec->minPH;
+
+                workflow->IT[i][j] = iterations * phases;
+
+
+                // allocate memory for the job properties per iteration
+                workflow->C[i][j] = (unsigned int*)calloc(workflow->IT[i][j], sizeof(unsigned int));
+                workflow->M[i][j] = (unsigned int*)calloc(workflow->IT[i][j], sizeof(unsigned int));
+                workflow->S[i][j] = (double*)calloc(workflow->IT[i][j], sizeof(double));
+                workflow->maxR[i][j] = (unsigned int*)calloc(workflow->IT[i][j], sizeof(unsigned int));
+                workflow->minR[i][j] = (unsigned int*)calloc(workflow->IT[i][j], sizeof(unsigned int));
+                workflow->CPT[i][j] = (unsigned int*)calloc(workflow->IT[i][j], sizeof(unsigned int));
+
+
+                // each iteration has several phases
+                for (unsigned int ph = 0; ph < phases; ph++){
+
+                    // compute mean C and M and the std
+                    unsigned int meanC, meanM;
+                    double stdC, stdM; 
+                    range = spec->maxC - spec->minC + 1;
+                    meanC = rand() % range + spec->minC;
+                    stdC = sqrt((double)meanC * (0.10 + ((double)rand() / (double)RAND_MAX) * (0.4 - 0.10)));                
+
+                    range = spec->maxM - spec->minM + 1;
+                    meanM = rand() % range + spec->minM;
+                    stdM = sqrt((double)meanM * (0.10 + ((double)rand() / (double)RAND_MAX) * (0.4 - 0.10)));     
+
+                    // scalability
+                    range = spec->maxS - spec->minS + 1;
+                    double S = (double)(rand() % range + spec->minS) / 100.0;
+
+                    // loop over the iterations of the phase
+                    for(unsigned int k = 0; k < iterations; k++){
+
+                        unsigned int iterationIndex = k * phases + ph;
+
+                        // compute C and M for the iteration
+                        double dC = gaussian((double)meanC, stdC);
+                        if(dC < 0.0) 
+                            dC = 0.0;
+
+                        workflow->C[i][j][iterationIndex] = (unsigned int)dC;
+                        
+                        
+                        double dM = gaussian((double)meanM, stdM);
+                        if(dM < 0.0) 
+                            dM = 0.0;
+
+                        workflow->M[i][j][iterationIndex] = (unsigned int)dM;
+
+                        workflow->CPT[i][j][iterationIndex] = rand() % spec->nCPTs;
+
+                        workflow->S[i][j][iterationIndex] = S;
+                    }
+                }
+
+                // resources per each iteration
+                range = spec->maxR - spec->minR + 1;
+                unsigned int minR = rand() % range + spec->minR;
+                
+                range = spec->maxR - minR + 1;
+                unsigned int maxR = rand() % range + minR;
+
+                // bound max
+                if(maxR > spec->maxR){
+                    
+                    maxR = spec->maxR;
+                }
+
+                if(jobType <= rigid){
+
+                    maxR = minR;
+                }
+
+                for(unsigned int it = 0; it<iterations * phases; it++){
+
+                    workflow->maxR[i][j][it] = maxR;
+                    workflow->minR[i][j][it] = minR;
+                }
+            }
+            // phases iterative
+            else{
+
+                // compute the number of phases
+                range = spec->maxPH - spec->minPH + 1;
+                unsigned int phases = rand() % range + spec->minPH;
+
+                // compute the number of iterations
+                unsigned int iterations = 0;
+                unsigned int *iterationsPerPhase = (unsigned int*)calloc(phases, sizeof(unsigned int));
+                // for each phase, compute the number of iterations
+                for(unsigned int ph = 0; ph < phases; ph++){
+
+                    range = spec->maxIT - spec->minIT + 1;
+                    unsigned int it = rand() % range + spec->minIT;
+                    iterations += it;
+                    iterationsPerPhase[ph] = it;
+                }
+
+                workflow->IT[i][j] = iterations;
+
+
+                // allocate memory for the job properties per iteration
+                workflow->C[i][j] = (unsigned int*)calloc(workflow->IT[i][j], sizeof(unsigned int));
+                workflow->M[i][j] = (unsigned int*)calloc(workflow->IT[i][j], sizeof(unsigned int));
+                workflow->S[i][j] = (double*)calloc(workflow->IT[i][j], sizeof(double));
+                workflow->maxR[i][j] = (unsigned int*)calloc(workflow->IT[i][j], sizeof(unsigned int));
+                workflow->minR[i][j] = (unsigned int*)calloc(workflow->IT[i][j], sizeof(unsigned int));
+                workflow->CPT[i][j] = (unsigned int*)calloc(workflow->IT[i][j], sizeof(unsigned int));
+
+                // loop over phases
+                unsigned int nextIteration = 0;
+                for(unsigned int ph = 0; ph < phases; ph++){
+
+                    // compute mean C and M and the std
+                    unsigned int meanC, meanM;
+                    double stdC, stdM; 
+                    range = spec->maxC - spec->minC + 1;
+                    meanC = rand() % range + spec->minC;
+                    stdC = sqrt((double)meanC * (0.10 + ((double)rand() / (double)RAND_MAX) * (0.4 - 0.10)));                
+
+                    range = spec->maxM - spec->minM + 1;
+                    meanM = rand() % range + spec->minM;
+                    stdM = sqrt((double)meanM * (0.10 + ((double)rand() / (double)RAND_MAX) * (0.4 - 0.10)));     
+
+
+                    // scalability
+                    range = spec->maxS - spec->minS + 1;
+                    double S = (double)(rand() % range + spec->minS) / 100.0;
+
+                    // loop over job iterations
+                    for(unsigned int k = 0; k<iterationsPerPhase[ph]; k++){
+
+                        // compute C and M for the iteration
+                        double dC = gaussian((double)meanC, stdC);
+                        if(dC < 0.0) 
+                            dC = 0.0;
+
+                        workflow->C[i][j][nextIteration] = (unsigned int)dC;
+                        
+                        
+                        double dM = gaussian((double)meanM, stdM);
+                        if(dM < 0.0) 
+                            dM = 0.0;
+
+                        workflow->M[i][j][nextIteration] = (unsigned int)dM;
+
+                        workflow->CPT[i][j][nextIteration] = rand() % spec->nCPTs;
+
+                        workflow->S[i][j][nextIteration] = S;
+                
+
+
+
+                        nextIteration ++;
+                    }
+                }
+
+
+                // resources per each iteration
+                range = spec->maxR - spec->minR + 1;
+                unsigned int minR = rand() % range + spec->minR;
+                
+                range = spec->maxR - minR + 1;
+                unsigned int maxR = rand() % range + minR;
+
+                // bound max
+                if(maxR > spec->maxR){
+                    
+                    maxR = spec->maxR;
+                }
+
+                if(jobType <= rigid){
+
+                    maxR = minR;
+                }
+
+                for(unsigned int it = 0; it<iterations; it++){
+
+                    workflow->maxR[i][j][it] = maxR;
+                    workflow->minR[i][j][it] = minR;
+                }
             }
         }
     }
