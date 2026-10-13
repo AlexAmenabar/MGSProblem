@@ -1068,7 +1068,7 @@ def evolving_scheduling_problem(workloadJSON, clusterJSON, resultsFile, solution
 
 
 
-def scheduling_ITERATIVE_RIGID_problem(workloadJSON, clusterJSON, resultsFile, solutionInfoFile, resultsFigure, timeout):
+def scheduling_ITERATIVE_RIGID_problem(workloadJSON, clusterJSON, resultsFile, solutionInfoFile, resultsFigure, timeout, threads):
 
 
     rng = np.random.default_rng(42)
@@ -1327,7 +1327,7 @@ def scheduling_ITERATIVE_RIGID_problem(workloadJSON, clusterJSON, resultsFile, s
                     if r == ss:
                         continue
 
-                    model.AddElement(cA[i,j,r,ss],[0, Ttransfer[i,j,r,ss]],Tactive[i,j,r,ss])
+                    model.AddElement(cA[i,j,r,ss],[0, TtransferLat[i,j,r,ss]],Tactive[i,j,r,ss])
                     active_pairs.append(Tactive[i,j,r,ss])
 
                     # P x BW
@@ -1335,6 +1335,7 @@ def scheduling_ITERATIVE_RIGID_problem(workloadJSON, clusterJSON, resultsFile, s
 
                     # M / P x BW
                     model.AddDivisionEquality(Ttransfer[i,j,r,ss],M[i][j] + PxBW[i,j,r,ss] - 1,PxBW[i,j,r,ss])
+                    model.Add(TtransferLat[i,j,r,ss] == Ttransfer[i,j,r,ss] + L[r][ss])
 
                     # cA = A x A
                     model.AddMultiplicationEquality(cA[i,j, r, ss],[A[i,j, r],A[i,j, ss]])
@@ -1358,7 +1359,7 @@ def scheduling_ITERATIVE_RIGID_problem(workloadJSON, clusterJSON, resultsFile, s
     # solve problem
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = timeout  #* 60 * 24 # 1 day
-    solver.parameters.num_search_workers = 16
+    solver.parameters.num_search_workers = threads
     print(model.Validate())
     status = solver.Solve(model)
 
@@ -1685,14 +1686,10 @@ def scheduling_ITERATIVE_RIGID_problem(workloadJSON, clusterJSON, resultsFile, s
 
     return [status, solver]
 
-def scheduling_MALLEABLE_problem(workloadJSON, clusterJSON, resultsFile, solutionInfoFile, resultsFigure, timeout):
-
-
-    rng = np.random.default_rng(42)
+def scheduling_MALLEABLE_problem(workloadJSON, clusterJSON, resultsFile, solutionInfoFile, resultsFigure, timeout, threads):
 
     # load problem data from json structures
     J = workloadJSON["nWorkflows"]
-    
     T = 0
 
     # initialize arrays
@@ -1734,6 +1731,7 @@ def scheduling_MALLEABLE_problem(workloadJSON, clusterJSON, resultsFile, solutio
             minR[j][i] = job["minR"][i] # do not consider iterations by now
             maxR[j][i] = job["maxR"][i] # do not consider iterations by now
             S[j][i] = job["S"][i]
+
 
             Cp[j][i] = math.ceil(C[j][i] * (S[j][i]))
             Cs[j][i] = math.ceil(C[j][i] * (1 - S[j][i]))
@@ -1962,7 +1960,7 @@ def scheduling_MALLEABLE_problem(workloadJSON, clusterJSON, resultsFile, solutio
                     
                     #model.AddMultiplicationEquality(Tactive[i, r, ss], [cA[i, r, ss], TtransferLat[i, r, ss]])
                     #model.AddElement(cA[i,j,r,ss],[0, TtransferLat[i,j,r,ss]],Tactive[i,j,r,ss])
-                    model.AddElement(cA[i,j,r,ss],[0, Ttransfer[i,j,r,ss]],Tactive[i,j,r,ss])
+                    model.AddElement(cA[i,j,r,ss],[0, TtransferLat[i,j,r,ss]],Tactive[i,j,r,ss])
                     active_pairs.append(Tactive[i,j,r,ss])
 
                     # P x BW
@@ -1970,6 +1968,7 @@ def scheduling_MALLEABLE_problem(workloadJSON, clusterJSON, resultsFile, solutio
 
                     # M / P x BW
                     model.AddDivisionEquality(Ttransfer[i,j,r,ss],M[i][j] + PxBW[i,j,r,ss] - 1,PxBW[i,j,r,ss])
+                    model.Add(TtransferLat[i,j,r,ss] == Ttransfer[i,j,r,ss] + L[r][ss])
 
                     # cA = A x A
                     model.AddMultiplicationEquality(cA[i,j, r, ss],[A[i,j, r],A[i,j, ss]])
@@ -2000,7 +1999,7 @@ def scheduling_MALLEABLE_problem(workloadJSON, clusterJSON, resultsFile, solutio
     # solve problem
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = timeout  #* 60 * 24 # 1 day
-    solver.parameters.num_search_workers = 16
+    solver.parameters.num_search_workers = threads
     print(model.Validate())
     status = solver.Solve(model)
 
@@ -2336,6 +2335,697 @@ def scheduling_MALLEABLE_problem(workloadJSON, clusterJSON, resultsFile, solutio
     return [status, solver]
 
 
+
+def scheduling_COMPLETE_problem(workloadJSON, clusterJSON, resultsFile, solutionInfoFile, resultsFigure, timeout, threads, spec):
+
+    # load problem data from json structures
+    J = workloadJSON["nWorkflows"]
+    T = 0
+
+    # initialize arrays
+    IT = [0 for j in range(J)]
+    CPT = [0 for j in range(J)]
+    S = [0.0 for j in range(J)]
+    l = [0 for j in range(J)]
+    O = [0 for j in range(J)]
+
+
+    C = [0 for j in range(J)]
+    SYNC = [0 for j in range(J)]
+    M = [0 for j in range(J)]
+
+    Cp = [0 for j in range(J)] # precompute
+    Cs = [0 for j in range(J)] # precompute
+    
+    minR = [0 for j in range(J)]
+    maxR = [0 for j in range(J)]
+    rigidR = [0 for j in range(J)]
+
+    mal = [0 for j in range(J)]
+    mol = [0 for j in range(J)]
+
+    workflows = workloadJSON["workflows"]
+    for j in range(J):
+
+        # we know we are working with workflows of individual jobs
+        job = workflows[j]["jobs"][0]
+
+        l[j] = workflows[j]["l"]
+        IT[j] = job["IT"]
+        CPT[j] = job["CPT"]
+        O[j] = job["O"]
+        mal[j] = job["malleable"]
+        mol[j] = job["moldable"]
+
+        # spec == 0, all jobs are rigid
+        if spec == 0:
+            mal[j] = 0
+            mol[j] = 0
+
+        # all jobs moldable
+        if spec == 1:
+            mal[j] = 0
+            mol[j] = 1
+
+        if spec == 2:
+            mal[j] = 1
+            mol[j] = 1
+
+        C[j] = [0 for i in range(IT[j])]
+        SYNC[j] = [0 for i in range(IT[j])]
+        M[j] = [0 for i in range(IT[j])]
+        S[j] = [0.0 for i in range(IT[j])]
+
+        Cp[j] = [0 for i in range(IT[j])]
+        Cs[j] = [0 for i in range(IT[j])]
+        minR[j] = [0 for i in range(IT[j])]
+        maxR[j] = [0 for i in range(IT[j])]
+        rigidR[j] = [0 for i in range(IT[j])]
+
+        for i in range(IT[j]):
+
+            C[j][i] = job["C"][i]
+            M[j][i] = job["M"][i]
+            minR[j][i] = job["minR"][i] # do not consider iterations by now
+            maxR[j][i] = job["maxR"][i] # do not consider iterations by now
+            rigidR[j][i] = job["rigidR"][i]
+
+            # if the job is rigid, then minR == maxR == rigidR
+            if mol[j] == 0 and mal[j] == 0:
+                minR[j][i] = rigidR[j][i]
+                maxR[j][i] = rigidR[j][i]
+
+            S[j][i] = job["S"][i]
+
+            # make some precomputations
+            Cp[j][i] = math.ceil(C[j][i] * (S[j][i]))
+            Cs[j][i] = math.ceil(C[j][i] * (1 - S[j][i]))
+
+            T = T + int((Cp[j][i] + Cs[j][i]) / 10 + M[j][i] / 100)
+
+
+    # cluster (number of GPUs)
+    N = clusterJSON["N"]
+    R = clusterJSON["nGPUs"]
+
+    # load latencies and bandwidths
+    L = [[0 for _ in range(R)] for _ in range(R)]
+    BW = [[0 for _ in range(R)] for _ in range(R)]
+
+    # intra node latencies and BW
+    nodes = clusterJSON["nodes"]
+    off = 0
+    maxLatencies = [0 for _ in range(N)]
+    for n in range(N):
+
+        # get node information
+        node = nodes[n]
+
+        # loop over the GPUs in the node
+        for gpu1 in range(node["nGPUs"]):
+            for gpu2 in range(node["nGPUs"]):
+                
+                if gpu1 == gpu2:
+                    continue
+                    
+                L[off + gpu1][off + gpu2] = node["gpusLatencies"][gpu1][gpu2]
+                BW[off + gpu1][off + gpu2] = node["gpusBandwidths"][gpu1][gpu2]
+
+                if L[off + gpu1][off + gpu2] > maxLatencies[n]:
+                    maxLatencies[n] = L[off + gpu1][off + gpu2]
+
+        off += node["nGPUs"]
+
+
+    # loop over nodes and compute inter-node latencies and bandwidths
+    off1 = 0
+    off2 = 0
+    for n1 in range(N):
+
+        off2 = 0
+        for n2 in range(N):
+
+            node1 = nodes[n1]
+            node2 = nodes[n2]
+
+            if(n1 == n2):
+                off2 = off2 + node1["nGPUs"]
+                continue
+
+
+            # compute latency from the GPUs in the node 1 to the node 2
+            latency = maxLatencies[n1] + maxLatencies[n2] + clusterJSON["latencies"][n1][n2]
+            bandwidth = clusterJSON["bandwidths"][n1][n2]
+            
+            # fill information in the matrix
+            for gpu1 in range(node1["nGPUs"]):
+                for gpu2 in range(node2["nGPUs"]):
+
+                    L[off1 + gpu1][off2 + gpu2] = latency
+                    BW[off1 + gpu1][off2 + gpu2] = bandwidth
+            
+            
+            off2 = off2 + node2["nGPUs"]
+
+        off1 = off1 + node1["nGPUs"]
+
+    ## create model
+    model = cp_model.CpModel()
+
+    ## initialize decision variables
+    A = {}
+    cA = {}
+    P = {}
+
+    s = {}
+    d = {}
+    e = {}
+    interval = {}
+
+    # Tcomm computation step by step
+    MPerGPU = {}
+    PxBW = {}
+    Ttransfer = {}
+    TtransferLat = {}
+    Tactive = {}
+    Tcomm = {}
+
+    # Tcomp computation step by step
+    TcompPar = {}
+    Tcomp = {}
+    Tsync = {}
+
+    # reconf
+    rf = {}
+    Trf = {}
+    allocationChanges = {}
+
+
+    # define variables
+    for i in range(J):
+
+        for j in range(IT[i]):
+
+            # Start/end
+            s[i,j] = model.NewIntVar(0, T, f"s[{i},{j}]")
+            d[i,j] = model.NewIntVar(1, T, f"d[{i},{j}]")
+            e[i,j] = model.NewIntVar(1, T, f"e[{i},{j}]")
+
+            P[i,j] = model.NewIntVar(minR[i][j], maxR[i][j], f"P[{i},{j}]")
+
+            MPerGPU[i,j] = model.NewIntVar(0, T, f"MPerGPU[{i},{j}]")
+            Tcomm[i,j] = model.NewIntVar(0,T,f"Tcomm[{i},{j}]")
+            Tcomp[i,j] = model.NewIntVar(0,T,f"Tcomp[{i},{j}]")
+            TcompPar[i,j] = model.NewIntVar(0,T,f"TcompPar[{i},{j}]")
+            Tsync[i,j] = model.NewIntVar(0,T,f"Tsync[{i},{j}]")
+            Trf[i,j] = model.NewIntVar(0,T,f"Trf[{i},{j}]")
+
+            rf[i,j] = model.NewBoolVar(f"rf[{i},{j}]")
+
+            for r in range(R):
+
+                A[i, j, r] = model.NewBoolVar(f"A[{i},{j},{r}]")
+                interval[i,j,r] = model.NewOptionalIntervalVar(s[i,j],d[i,j],e[i,j],A[i, j, r],f"I_{i}_{j}_{r}")
+
+                allocationChanges[i, j, r] = model.NewIntVar(0, 1, f"allocationChange[{i},{j},{r}]")
+
+                for ss in range(R):
+
+                    if r==ss:
+                        continue
+
+                    cA[i,j,r,ss] = model.NewIntVar(0,1,f"cA[{i},{j},{r},{ss}]")
+
+                    Ttransfer[i,j,r,ss] = model.NewIntVar(0, T,f"Ttransfer[{i},{j},{r},{ss}]")
+                    TtransferLat[i,j,r,ss] = model.NewIntVar(0, T,f"TtransferLat[{i},{j},{r},{ss}]")
+                    Tactive[i,j,r,ss] = model.NewIntVar(0, T,f"TtransferLat[{i},{j},{r},{ss}]")
+                    
+                    PxBW[i,j,r,ss] = model.NewIntVar(1,T,f"PxBW[{i},{j},{r},{ss}]")
+
+
+    # OBJECTIVES
+    # Average slowdown
+    avSlowdown = model.NewIntVar(1,T, "avSlowdown")
+    sumSlowdowns = model.NewIntVar(1,T,"sumSlowdown")
+    slowdowns = {}
+    for j in range(J):
+        
+        slowdowns[j] = model.NewIntVar(1,T, f"Slowdown[{j}]")
+        model.AddDivisionEquality(slowdowns[j], e[j,IT[j]-1] - l[j], sum(d[j,i] for i in range(IT[j])))
+        
+    model.Add(sumSlowdowns == sum(slowdowns[j] for j in range(J)))
+    model.AddDivisionEquality(avSlowdown, sumSlowdowns, J)
+
+    # makespan
+    makespan = model.NewIntVar(0, T, "makespan")
+    for i in range(J):
+        for j in range(IT[i]):
+            model.Add(makespan >= e[i,j])
+
+    model.AddMaxEquality(makespan,[e[i, j] for i in range(J) for j in range(IT[i])])
+
+    # turnaround time
+    turnaroundTime = {}
+    avTurnaroundTime = model.NewIntVar(0, T, "avTurnaround")
+    sumTurnaroundTime = model.NewIntVar(0, T, "sumTurnaround")
+
+    for j in range(J):
+        turnaroundTime[j] = model.NewIntVar(0,T, f"turnaround[{j}]")
+        model.Add(turnaroundTime[j] == e[j,IT[j]-1] - l[j])
+
+    model.Add(sumTurnaroundTime == sum(turnaroundTime[j] for j in range(J)))
+    model.AddDivisionEquality(avTurnaroundTime, sumTurnaroundTime, J)
+
+    ## objective function: minimize the makespan
+    #model.Minimize(makespan)
+
+    model.Minimize(avTurnaroundTime)
+
+    ## problem constraints
+    for i in range(J):
+
+        # Launch time
+        model.Add(s[i,0] >= l[i])
+
+        for j in range(IT[i]):
+
+            active_pairs = []
+            changes = [] # changes in resources
+
+            if j > 0:
+
+                # A iteration cannot start before the previous iteration finished
+                model.Add(s[i,j] == e[i,j-1] + 1)
+
+            # P = sum(A) and minR <= P <= maxR
+            model.Add(P[i,j] == sum(A[i, j, r] for r in range(R)))
+            model.Add(P[i,j] >= minR[i][j])
+            model.Add(P[i,j] <= maxR[i][j])
+
+            # e = s + d, a iteration ends when all its computation has been processed
+            model.Add(e[i,j] == s[i,j] + d[i,j])
+
+            # process Cp / P -- (Cp + P - 1) / P, [ceil]
+            model.AddDivisionEquality(TcompPar[i,j], Cp[i][j] + P[i,j] - 1, P[i,j])
+
+            # synchronization cost
+            model.AddMultiplicationEquality(Tsync[i, j],[P[i,j]-1,SYNC[i][j]])
+
+            # total computation time
+            model.Add(Tcomp[i,j] == TcompPar[i,j] + Cs[i][j] + Tsync[i,j])
+
+            for r in range(R):
+
+                if(j < IT[i] - 1):
+                    model.AddAbsEquality(allocationChanges[i, j, r],A[i, j, r] - A[i, j + 1, r])
+                changes.append(allocationChanges[i, j, r])
+
+                for ss in range(R):
+
+                    if r == ss:
+                        continue
+
+                    model.AddElement(cA[i,j,r,ss],[0, TtransferLat[i,j,r,ss]],Tactive[i,j,r,ss])
+                    active_pairs.append(Tactive[i,j,r,ss])
+
+                    # P x BW
+                    model.AddMultiplicationEquality(PxBW[i, j, r, ss],[P[i,j],BW[r][ss]])
+
+                    # M / P x BW
+                    model.AddDivisionEquality(Ttransfer[i,j,r,ss],M[i][j] + PxBW[i,j,r,ss] - 1,PxBW[i,j,r,ss])
+                    model.Add(TtransferLat[i,j,r,ss] == Ttransfer[i,j,r,ss] + L[r][ss])
+
+                    # cA = A x A
+                    model.AddMultiplicationEquality(cA[i,j, r, ss],[A[i,j, r],A[i,j, ss]])
+
+
+            # rf can be 1 only if the job is malleable
+            model.Add(rf[i,j] <= mal[i])
+
+            # rf[i,j] = 1 iff at least one GPU changes allocation
+            model.AddMaxEquality(rf[i, j], changes)
+
+                    
+            model.AddMaxEquality(Tcomm[i,j], active_pairs)
+
+            # Trf computation: Oi if rf == 1
+            model.AddElement(rf[i,j],[0, O[i]],Trf[i,j])
+
+            # d[i] computation
+            model.Add(d[i,j] == Tcomp[i,j] + Tcomm[i,j] + Trf[i,j])
+
+    # No next iteration exists after the final iteration
+    model.Add(rf[i, IT[i] - 1] == 0)
+
+
+    # intervals - resource usage cannot overlap
+    for r in range(R):
+        model.AddNoOverlap([interval[i,j, r] for i in range(J) for j in range(IT[i])])
+
+
+    # solve problem
+    
+    # solve problem
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = timeout  #* 60 * 24 # 1 day
+    solver.parameters.num_search_workers = threads
+    print(model.Validate())
+    status = solver.Solve(model)
+
+    # ============================================================
+    # Results
+    # ============================================================
+
+    print("Status:", solver.StatusName(status))
+    print("Objective:", solver.ObjectiveValue())
+    print("Best bound:", solver.BestObjectiveBound(), flush=True)
+    
+    '''solver = cp_model.CpSolver()
+
+    solver.parameters.max_time_in_seconds = timeout
+    solver.parameters.relative_gap_limit = 0.01
+    solver.parameters.num_search_workers = 16
+    callback = ProgressCallback(report_interval=30.0)
+    
+    print(model.Validate(), flush=True)
+
+    status = solver.SolveWithSolutionCallback(model, callback)
+
+    #status = solver.Solve(model)
+
+    # results
+    print("Status:", solver.StatusName(status))
+    print("Objective:", solver.ObjectiveValue())
+    print("Best bound:", solver.BestObjectiveBound(), flush=True)
+
+
+    if abs(solver.ObjectiveValue()) > 1e-9:
+        gap = abs(solver.ObjectiveValue() - solver.BestObjectiveBound()) 
+        max(1.0, abs(solver.ObjectiveValue()))
+        print(f"Gap: {100.0 * gap:.4f}%")'''
+
+
+    if status in (cp_model.OPTIMAL,cp_model.FEASIBLE):
+
+        solution_makespan = solver.Value(makespan)
+        solution_avSLD = solver.Value(avSlowdown)
+        solution_avTAT = solver.Value(avTurnaroundTime)
+        print(f"Makespan: {solution_makespan}",flush=True)
+        print(f"BSLD: {solution_avSLD}",flush=True)
+        print(f"Turnaround time: {solution_avTAT}",flush=True)
+
+        # compute real values
+        real_turn = 0.0
+        for j in range(J):
+            real_turn += float(solver.Value(e[j,IT[j]-1])) - float(solver.Value(l[j]))
+        real_turn /= float(J)
+        print(f"Real Turnaround time: {real_turn}",flush=True)
+
+
+        # save solution variables in a file
+        with open(resultsFile, "w", newline="") as f:
+
+            writer = csv.writer(f)
+
+            writer.writerow(["job", "iteration","start","end","duration","resources","gpus"])
+
+            for i in range(J):
+
+                for j in range(IT[i]):
+                    start = solver.Value(s[i,j])
+                    end = solver.Value(e[i,j])
+                    duration = solver.Value(d[i,j])
+
+                    resources = P[i,j]
+
+                    gpus = [
+                        r
+                        for r in range(R)
+                        if solver.Value(A[i,j, r])
+                    ]
+
+                    writer.writerow([
+                        i,
+                        j,
+                        start,
+                        end,
+                        duration,
+                        resources,
+                        ",".join(map(str, gpus))
+                    ])
+
+
+        # save general solver information
+        solution_info = {
+            "status": solver.StatusName(status),
+            "makespan": solution_makespan,
+            "objective": solver.ObjectiveValue(),
+            "best_bound": solver.BestObjectiveBound(),
+            "jobs": J,
+            "resources": R,
+            "time_horizon": T
+        }
+
+        with open(solutionInfoFile, "w") as f:
+            json.dump(solution_info, f, indent=4)
+
+
+        # ------------------------------------------------------------
+        # Plot GPU allocation
+        # ------------------------------------------------------------
+
+        # Add a small margin after the makespan.
+        margin = max(20, int(0.05 * solution_makespan))
+        plot_end = min(T, solution_makespan + margin)
+
+        print(
+            f"Plotting time range: 0 - {plot_end}",
+            flush=True
+        )
+
+        # occupancy[r, t] = iteration executing on GPU r at time t
+        #
+        # -1 means that the GPU is idle.
+        #
+        # We use a unique ID for every (job, iteration) pair.
+        iteration_id = {}
+        current_id = 0
+
+        for i in range(J):
+            for j in range(IT[i]):
+                iteration_id[i, j] = current_id
+                current_id += 1
+
+        occupancy = -np.ones(
+            (R, plot_end),
+            dtype=int
+        )
+
+
+        # ------------------------------------------------------------
+        # Fill GPU occupancy
+        # ------------------------------------------------------------
+
+        for i in range(J):
+
+            for j in range(IT[i]):
+
+                start = solver.Value(s[i, j])
+                end = solver.Value(e[i, j])
+
+                # Nothing to plot if the iteration starts after
+                # the plotting horizon.
+                if start >= plot_end:
+                    continue
+
+                # Clip interval to plotting horizon.
+                start_plot = max(0, start)
+                end_plot = min(plot_end, end)
+
+                # Find GPUs assigned to this iteration.
+                gpus = [
+                    r
+                    for r in range(R)
+                    if solver.Value(A[i, j, r])
+                ]
+
+                # Unique ID for this iteration.
+                iid = iteration_id[i, j]
+
+                for r in gpus:
+                    occupancy[
+                        r,
+                        start_plot:end_plot
+                    ] = iid
+
+
+        # ------------------------------------------------------------
+        # Plot
+        # ------------------------------------------------------------
+
+        fig, ax = plt.subplots(figsize=(16, 6))
+
+        ax.imshow(
+            occupancy,
+            aspect="auto",
+            interpolation="none",
+            extent=[
+                0,
+                plot_end,
+                R - 0.5,
+                -0.5
+            ]
+        )
+
+        ax.set_xlabel("Time step")
+        ax.set_ylabel("GPU")
+
+        ax.set_yticks(
+            range(R)
+        )
+
+        ax.set_yticklabels(
+            [f"GPU {r}" for r in range(R)]
+        )
+
+        ax.set_title(
+            f"GPU Allocation "
+            f"(makespan = {solution_makespan})"
+        )
+
+
+        # ------------------------------------------------------------
+        # Vertical grid lines
+        # ------------------------------------------------------------
+
+        number_of_ticks = 20
+
+        ax.set_xticks(
+            np.linspace(
+                0,
+                plot_end,
+                number_of_ticks + 1
+            )
+        )
+
+        ax.grid(
+            axis="x",
+            linestyle="--",
+            alpha=0.4
+        )
+
+
+        # ------------------------------------------------------------
+        # Add iteration labels
+        # ------------------------------------------------------------
+
+        for i in range(J):
+
+            for j in range(IT[i]):
+
+                start = solver.Value(s[i, j])
+                end = solver.Value(e[i, j])
+
+                if start >= plot_end:
+                    continue
+
+                end_plot = min(
+                    end,
+                    plot_end
+                )
+
+                visible_width = end_plot - max(start, 0)
+
+                # Don't put labels on extremely short intervals.
+                if visible_width < 3:
+                    continue
+
+                # Find GPUs assigned to this iteration.
+                gpus = [
+                    r
+                    for r in range(R)
+                    if solver.Value(A[i, j, r])
+                ]
+
+                if not gpus:
+                    continue
+
+                # Label in the middle of the iteration.
+                label_x = (
+                    max(start, 0) + end_plot
+                ) / 2
+
+                for r in gpus:
+
+                    ax.text(
+                        label_x,
+                        r,
+                        f"J{i}-I{j}",
+                        ha="center",
+                        va="center",
+                        fontsize=8
+                    )
+
+
+        # ------------------------------------------------------------
+        # Mark iteration boundaries
+        # ------------------------------------------------------------
+
+        for i in range(J):
+
+            for j in range(IT[i]):
+
+                start = solver.Value(s[i, j])
+
+                if 0 < start < plot_end:
+
+                    ax.axvline(
+                        start,
+                        linestyle=":",
+                        linewidth=0.8,
+                        alpha=0.5
+                    )
+
+
+        # ------------------------------------------------------------
+        # Mark makespan
+        # ------------------------------------------------------------
+
+        ax.axvline(
+            solution_makespan,
+            linestyle="--",
+            linewidth=1.5
+        )
+
+        ax.text(
+            solution_makespan,
+            R - 0.5,
+            f"  makespan = {solution_makespan}",
+            rotation=90,
+            va="bottom",
+            ha="left"
+        )
+
+
+        # ------------------------------------------------------------
+        # Save plot
+        # ------------------------------------------------------------
+
+        plt.tight_layout()
+
+        plt.savefig(
+            resultsFigure,
+            dpi=300,
+            bbox_inches="tight"
+        )
+
+        plt.close()
+
+    return [status, solver]
+
+
+
+
 # main function
 if __name__=="__main__":
     
@@ -2347,13 +3037,16 @@ if __name__=="__main__":
     solutionInfoFile = sys.argv[5]
     resultsFigure = sys.argv[6]
     timeout = int(sys.argv[7])
+    threads = int(sys.argv[8])
 
     workload = load_workload_json(inWorkload)
     cluster = load_cluster_json(inCluster)
 
     if problem == 0:
-        res = scheduling_ITERATIVE_RIGID_problem(workload, cluster, resultsFile, solutionInfoFile, resultsFigure, timeout)
+        res = scheduling_ITERATIVE_RIGID_problem(workload, cluster, resultsFile, solutionInfoFile, resultsFigure, timeout, threads)
     elif problem == 1:
         res = evolving_scheduling_problem(workload, cluster, resultsFile, solutionInfoFile, resultsFigure, timeout)
     elif problem == 2:
-        res = scheduling_MALLEABLE_problem(workload, cluster, resultsFile, solutionInfoFile, resultsFigure, timeout)
+        res = scheduling_MALLEABLE_problem(workload, cluster, resultsFile, solutionInfoFile, resultsFigure, timeout, threads)
+    elif problem == 3:
+        res = scheduling_COMPLETE_problem(workload, cluster, resultsFile, solutionInfoFile, resultsFigure, timeout, threads)

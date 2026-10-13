@@ -6,6 +6,8 @@
     "minJobs": 1,
     "maxC": 50,
     "minC": 5,
+    "maxSYNC": 5,
+    "minSYNC": 3,
     "maxM": 50,
     "minM":0,
     "maxO":10,
@@ -18,7 +20,8 @@
     "minPh": 2,
     "maxR": 8,
     "minR": 1,
-    "cpts":["RING"],
+    "k":0.5,
+    "cpts": [0,1,2,3,4],
     "minL": 1,
     "maxL": 100,
 
@@ -27,5 +30,6 @@
     "phasesiterative": 0.33,
     "moldable": 0.0,
     "malleable": 1.0,
-    "evolving": 0.0
+    "evolving": 0.0,
+    "pSingleGPU" : 0.6
 }

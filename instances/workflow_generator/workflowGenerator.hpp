@@ -18,14 +18,17 @@ struct workflowSpec_t{
     unsigned int maxIT, minIT; // range of min and max iterations per each job
     unsigned int maxPH, minPH; // range of max and min phases per each job
     unsigned int maxR, minR; // range of possible resource amounts used by each job
+    unsigned int minSYNC, maxSYNC;
+    double k;
     unsigned int minL, maxL;
     unsigned int minS, maxS;
 
     unsigned int nCPTs;
-    CPT *cpts; // possible communication patterns used by the jobs in the workflow
+    unsigned int *cpts; // possible communication patterns used by the jobs in the workflow
 
     float pIterative, pIterativePhases, pPhasesIterative;
     float pRigid, pMoldable, pMalleable, pEvolving;
+    float pSingleGPU;
 };
 
 struct workflow_t{
@@ -34,7 +37,7 @@ struct workflow_t{
     unsigned int pWorkflows; // percentage of workflows in the workload 
     unsigned int deps; // whether there are dependencies or no in the workflows
     
-    unsigned int *nJobs, ***C, ***M, **O, **IT, **PH, ***maxR, ***minR, ***CPT, *l;
+    unsigned int *nJobs, ***C, ***M, **O, **IT, **PH, ***maxR, ***minR, ***SYNC, ***rigidR, ***CPT, *l;
     double ***S;
-    unsigned int **malleable;
+    unsigned int **moldable, **malleable;
 };

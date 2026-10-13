@@ -81,3 +81,4 @@ heuristics/*.txt
 orToolsImplementation/.uv/
 orToolsImplementation/.venv/
 tmp/
+cJSON/

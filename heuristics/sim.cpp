@@ -12,6 +12,8 @@
 
 #include "cJSON.h"
 
+
+// g++ -g -I../instances/cJSON/ -o sim sim.cpp ../instances/cJSON/cJSON.c resources.cpp jobQueue.cpp events.cpp job.cpp rcfPolicies.cpp IO.cpp
 cJSON* readJSONFile(char *in){
     
     // open file 

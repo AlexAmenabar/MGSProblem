@@ -96,7 +96,7 @@ unsigned int computeCommunicationTime(unsigned int M, allocation_t *alloc, clust
 
             //tmpCommTime = latency + (M / (BW * alloc->nGPUs));
             unsigned int PxBW = alloc->nGPUs * BW;
-            tmpCommTime = ceil((M + PxBW - 1) / PxBW);
+            tmpCommTime = ceil((M + PxBW - 1) / PxBW) + latency;
             //tmpCommTime = tmpCommTime / BW;
             //tmpCommTime = M / (BW * alloc->nGPUs);
 
