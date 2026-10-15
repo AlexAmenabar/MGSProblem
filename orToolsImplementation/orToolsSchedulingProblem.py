@@ -2391,6 +2391,8 @@ def scheduling_COMPLETE_problem(workloadJSON, clusterJSON, resultsFile, solution
             mal[j] = 1
             mol[j] = 1
 
+        # if soec > 2, then combined model
+
         C[j] = [0 for i in range(IT[j])]
         SYNC[j] = [0 for i in range(IT[j])]
         M[j] = [0 for i in range(IT[j])]

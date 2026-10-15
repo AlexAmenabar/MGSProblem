@@ -82,3 +82,4 @@ orToolsImplementation/.uv/
 orToolsImplementation/.venv/
 tmp/
 cJSON/
+ortools_env/
